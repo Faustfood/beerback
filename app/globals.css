@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body {
+    @apply bg-bg text-ink;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    overscroll-behavior: none;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-ink text-white px-6 py-3 rounded-2xl font-semibold
+           transition-transform active:scale-[0.98] disabled:opacity-50;
+  }
+
+  .btn-gold {
+    @apply bg-gradient-to-br from-gold to-gold-deep text-white
+           px-6 py-3 rounded-2xl font-bold shadow-lg
+           transition-transform active:scale-[0.98] disabled:opacity-50;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 border border-line rounded-xl
+           bg-bg-card focus:outline-none focus:border-gold
+           transition-colors;
+  }
+
+  .card {
+    @apply bg-bg-card border border-line rounded-2xl p-4;
+  }
+
+  .label {
+    @apply text-xs uppercase tracking-wider text-ink-soft font-semibold mb-2 block;
+  }
+}

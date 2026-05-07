@@ -105,7 +105,7 @@ export function spinWheel(streakDays: number = 0): {
   const totalWeight = HOPFEN.WHEEL_WEIGHTS.reduce((a, b) => a + b, 0)
   let rand = Math.random() * totalWeight
 
-  let baseAmount = HOPFEN.WHEEL_VALUES[0]
+  let baseAmount: number = HOPFEN.WHEEL_VALUES[0]
   for (let i = 0; i < HOPFEN.WHEEL_VALUES.length; i++) {
     rand -= HOPFEN.WHEEL_WEIGHTS[i]
     if (rand <= 0) {

@@ -4,6 +4,15 @@ import { LogoutButton } from '@/components/layout/LogoutButton'
 import { format } from 'date-fns'
 import { de } from 'date-fns/locale'
 
+type GroupedBeer = {
+  name: string
+  count: number
+  avgRating: number | null
+  lastDate: string
+  locations: Set<string>
+  photo_url: string | null
+}
+
 export default async function ProfilePage() {
   const supabase = await createClient()
 
@@ -18,17 +27,54 @@ export default async function ProfilePage() {
 
   if (!profile) redirect('/onboarding')
 
-  const { data: beers } = await supabase
+  // Alle Biere holen für Gruppierung
+  const { data: allBeers } = await supabase
     .from('beers')
     .select('id, name, location_freetext, rating, photo_url, created_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
-    .limit(20)
 
-  const { count: totalBeers } = await supabase
-    .from('beers')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id)
+  // Biere nach Name gruppieren
+  const groupedMap = new Map<string, GroupedBeer>()
+  allBeers?.forEach((beer) => {
+    const key = beer.name.trim().toLowerCase()
+    if (!groupedMap.has(key)) {
+      groupedMap.set(key, {
+        name: beer.name,
+        count: 1,
+        avgRating: beer.rating,
+        lastDate: beer.created_at,
+        locations: new Set(beer.location_freetext ? [beer.location_freetext] : []),
+        photo_url: beer.photo_url,
+      })
+    } else {
+      const existing = groupedMap.get(key)!
+      existing.count += 1
+      if (beer.rating) {
+        existing.avgRating = existing.avgRating
+          ? (existing.avgRating * (existing.count - 1) + beer.rating) / existing.count
+          : beer.rating
+      }
+      if (beer.location_freetext) existing.locations.add(beer.location_freetext)
+      // Foto vom letzten/neuesten Eintrag bevorzugen, aber nur falls vorhanden
+      if (!existing.photo_url && beer.photo_url) {
+        existing.photo_url = beer.photo_url
+      }
+    }
+  })
+
+  const groupedBeers = Array.from(groupedMap.values()).sort((a, b) => b.count - a.count)
+
+  // Stats
+  const totalBeers = allBeers?.length || 0
+  const uniqueBeers = groupedBeers.length
+
+  // Jahres-Stats (aktuelles Jahr)
+  const currentYear = new Date().getFullYear()
+  const beersThisYear = allBeers?.filter(
+    (b) => new Date(b.created_at).getFullYear() === currentYear
+  ) || []
+  const uniqueThisYear = new Set(beersThisYear.map(b => b.name.trim().toLowerCase())).size
 
   return (
     <div>
@@ -53,21 +99,21 @@ export default async function ProfilePage() {
       </div>
 
       {/* Stats */}
-      <div className="px-5 grid grid-cols-3 gap-2 mb-6">
+      <div className="px-5 grid grid-cols-3 gap-2 mb-4">
         <div className="card text-center !p-3">
           <div className="font-display text-xl font-extrabold text-gold-deep">
-            {totalBeers || 0}
+            {totalBeers}
           </div>
           <div className="text-[10px] uppercase tracking-wide text-ink-soft">
-            Biere
+            Biere gesamt
           </div>
         </div>
         <div className="card text-center !p-3">
           <div className="font-display text-xl font-extrabold text-gold-deep">
-            {profile.streak_days}
+            {uniqueBeers}
           </div>
           <div className="text-[10px] uppercase tracking-wide text-ink-soft">
-            Streak
+            Versch. Sorten
           </div>
         </div>
         <div className="card text-center !p-3">
@@ -80,11 +126,42 @@ export default async function ProfilePage() {
         </div>
       </div>
 
-      {/* Beer Collection */}
-      <div className="px-5 mb-6">
-        <h2 className="font-display text-lg font-bold mb-3">Meine Biere</h2>
+      {/* Jahres-Stats */}
+      {beersThisYear.length > 0 && (
+        <div className="mx-5 mb-6 bg-gradient-to-br from-gold-light/30 to-foam border border-gold/30 rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-2xl">📊</span>
+            <strong className="font-display">Dein Jahr {currentYear}</strong>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div>
+              <div className="font-display text-2xl font-bold text-gold-deep">
+                {beersThisYear.length}
+              </div>
+              <div className="text-xs text-ink-soft">Biere dieses Jahr</div>
+            </div>
+            <div>
+              <div className="font-display text-2xl font-bold text-gold-deep">
+                {uniqueThisYear}
+              </div>
+              <div className="text-xs text-ink-soft">Sorten probiert</div>
+            </div>
+          </div>
+        </div>
+      )}
 
-        {!beers || beers.length === 0 ? (
+      {/* Beer Collection (gruppiert) */}
+      <div className="px-5 mb-6">
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="font-display text-lg font-bold">Meine Sammlung</h2>
+          {groupedBeers.length > 0 && (
+            <span className="text-xs text-ink-soft">
+              {uniqueBeers} Sorten · {totalBeers} Biere
+            </span>
+          )}
+        </div>
+
+        {!groupedBeers || groupedBeers.length === 0 ? (
           <div className="card text-center py-8">
             <div className="text-5xl mb-2 opacity-50">🍺</div>
             <p className="text-sm text-ink-soft">
@@ -93,30 +170,47 @@ export default async function ProfilePage() {
           </div>
         ) : (
           <div className="space-y-2">
-            {beers.map((beer) => (
-              <div key={beer.id} className="card flex items-center gap-3">
+            {groupedBeers.map((beer) => (
+              <div key={beer.name} className="card flex items-center gap-3 relative overflow-hidden">
+                {/* Count-Badge oben rechts */}
+                {beer.count > 1 && (
+                  <div className="absolute top-2 right-2 bg-gold text-white text-xs font-bold rounded-full min-w-[28px] h-7 flex items-center justify-center px-2">
+                    ×{beer.count}
+                  </div>
+                )}
+
+                {/* Photo or Icon */}
                 {beer.photo_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={beer.photo_url}
                     alt={beer.name}
-                    className="w-12 h-12 rounded-xl object-cover flex-shrink-0"
+                    className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
                   />
                 ) : (
-                  <div className="w-12 h-12 bg-gradient-to-br from-gold-light to-gold-deep rounded-xl flex items-center justify-center text-xl flex-shrink-0">
+                  <div className="w-14 h-14 bg-gradient-to-br from-gold-light to-gold-deep rounded-xl flex items-center justify-center text-2xl flex-shrink-0">
                     🍺
                   </div>
                 )}
-                <div className="flex-1 min-w-0">
+
+                <div className="flex-1 min-w-0 pr-8">
                   <strong className="text-sm block truncate">{beer.name}</strong>
-                  <span className="text-xs text-ink-soft">
-                    {beer.location_freetext || 'Ohne Ort'} ·{' '}
-                    {format(new Date(beer.created_at), 'd. MMM', { locale: de })}
+                  <div className="flex items-center gap-2 text-xs text-ink-soft">
+                    <span className="truncate">
+                      {beer.locations.size === 1
+                        ? Array.from(beer.locations)[0]
+                        : `${beer.locations.size} Orte`}
+                    </span>
+                    {beer.avgRating && (
+                      <span className="flex-shrink-0">
+                        · {beer.avgRating.toFixed(1)} ⭐
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-ink-soft">
+                    Zuletzt: {format(new Date(beer.lastDate), 'd. MMM yyyy', { locale: de })}
                   </span>
                 </div>
-                {beer.rating && (
-                  <div className="text-sm">{'⭐'.repeat(beer.rating)}</div>
-                )}
               </div>
             ))}
           </div>

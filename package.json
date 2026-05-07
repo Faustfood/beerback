@@ -14,7 +14,7 @@
     "@supabase/supabase-js": "^2.46.0",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.453.0",
-    "next": "14.2.18",
+    "next": "^14.2.32",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
